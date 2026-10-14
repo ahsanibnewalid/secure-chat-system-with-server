@@ -1,0 +1,73 @@
+# Setup (Windows and Linux)
+
+The server uses Node.js and SQLite so the same source runs natively on Windows and Linux. WSL is not required. Install a current Node.js LTS release (20 or newer) from https://nodejs.org/.
+
+## 1. Install dependencies
+
+From the repository directory:
+
+```sh
+npm install
+```
+
+## 2. Create a TLS certificate
+
+For local testing, use OpenSSL (available from the OpenSSL project and many OS package managers). Replace `chat.example.test` with the DNS name clients will use. A self-signed certificate is only for development; clients must explicitly trust it.
+
+```sh
+mkdir -p certs
+openssl req -x509 -newkey rsa:3072 -sha256 -nodes -days 30 \
+  -keyout certs/server-key.pem -out certs/server-cert.pem \
+  -subj "/CN=chat.example.test" \
+  -addext "subjectAltName=DNS:chat.example.test,IP:127.0.0.1"
+```
+
+Windows PowerShell can run the same OpenSSL command if OpenSSL is installed; create the `certs` directory first with `New-Item -ItemType Directory certs`. Do not expose the private key or commit certificates. For public hosting, use a certificate from a trusted CA and include the actual DNS name in its SAN.
+
+## 3. Configure
+
+Copy `.env.example` to `.env`, then set `TLS_KEY`, `TLS_CERT`, `HOST`, and `PORT` as needed. Node does not load `.env` automatically on every supported version: export variables in the service manager, or use Node's `--env-file=.env` option. Keep `HOST=127.0.0.1` until TLS, firewall, and admin access are configured. To allow other devices on the LAN, bind to the server's LAN address and permit the chosen TCP port in the firewall.
+
+Generate a strong one-time admin bootstrap token (at least 24 characters), put it in the environment as `ADMIN_BOOTSTRAP_TOKEN`, and start the service:
+
+```sh
+node --env-file=.env src/server.js
+```
+
+Windows PowerShell:
+
+```powershell
+node --env-file=.env src/server.js
+```
+
+Open `https://127.0.0.1:8443` (or your configured DNS name). Browser certificate warnings mean the certificate is not trusted or does not match the host; do not bypass them for real accounts.
+
+## 4. Create the first administrator
+
+Use the one-time bootstrap endpoint from a trusted local machine. Replace values and use the exact host/certificate trust setup. Example:
+
+```sh
+curl --cacert certs/server-cert.pem -H "Content-Type: application/json" \
+  -H "X-Bootstrap-Token: YOUR_LONG_BOOTSTRAP_TOKEN" \
+  -d '{"username":"siteadmin","password":"replace-this-with-a-long-unique-password"}' \
+  https://127.0.0.1:8443/api/v1/admin/bootstrap
+```
+
+The first successful call creates the administrator. Remove `ADMIN_BOOTSTRAP_TOKEN` from the service environment immediately and restart. Never put the token in browser code, source control, a URL, or a public issue. The web admin screens are not yet implemented; the authenticated admin API is available for integration.
+
+## 5. Run as a service
+
+For a reliable installation, configure a Windows Service using your organization's approved service wrapper, or a systemd unit on Linux. Run as a dedicated low-privilege OS account, grant it write access only to the data directory, restrict the port at the firewall, and keep Node and dependencies patched. Service-wrapper packaging and graphical setup wizard are planned, not yet included.
+
+## Data, backup, and recovery
+
+The SQLite database is `data/chat.sqlite` (with transient WAL files while running). Stop the server cleanly before copying the database for a simple consistent backup. Restore only a verified backup while the service is stopped, preserve restrictive filesystem permissions, then start and check `/api/v1/health`. Automated backup validation/restoration UI is not yet implemented. Keep backup copies encrypted and access-controlled.
+
+## Troubleshooting
+
+- **TLS certificate not found:** verify `TLS_KEY` and `TLS_CERT` paths relative to the current working directory.
+- **Browser rejects TLS:** install/trust a certificate whose SAN matches the hostname; never disable verification.
+- **Port in use:** choose a free port and update firewall/client URL.
+- **Database errors:** ensure the service account can write to `DATA_DIR`; stop before manual database recovery.
+- **Registration denied:** check `ALLOW_REGISTRATION`.
+- **Health check:** `GET /api/v1/health` reports process uptime, live online count and database reachability.
