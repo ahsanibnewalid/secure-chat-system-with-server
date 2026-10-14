@@ -22,8 +22,13 @@ app.disable('x-powered-by');
 app.use(express.json({ limit: '16kb', strict: true }));
 app.use((req, res, next) => {
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('X-Frame-Options', 'DENY');
   res.setHeader('Referrer-Policy', 'no-referrer');
+  res.setHeader('Permissions-Policy', 'camera=(), microphone=(), geolocation=(self)');
+  res.setHeader('Cross-Origin-Opener-Policy', 'same-origin');
+  res.setHeader('Cross-Origin-Resource-Policy', 'same-origin');
   res.setHeader('Cache-Control', 'no-store');
+  if (req.secure) res.setHeader('Strict-Transport-Security', 'max-age=31536000');
   next();
 });
 app.use(express.static(path.join(__dirname, '..', 'public'), { index: 'index.html', etag: true }));
@@ -229,11 +234,18 @@ app.get('/api/v1/push/public-key', requireAuth, (req,res) => {
   if (!pushConfigured) return res.status(503).json({ error:'Server Web Push keys are not configured.' });
   res.json({ publicKey:vapidPublicKey });
 });
-app.post('/api/v1/push/subscribe', requireAuth, (req,res) => {
+app.post('/api/v1/push/subscribe', requireAuth, authAbuseGuard, (req,res) => {
   if (!pushConfigured) return res.status(503).json({ error:'Server Web Push keys are not configured.' });
   const sub = req.body && req.body.subscription;
-  if (!sub || typeof sub.endpoint !== 'string' || sub.endpoint.length > 2048 || !sub.keys || typeof sub.keys.p256dh !== 'string' || typeof sub.keys.auth !== 'string')
-    return res.status(400).json({ error:'Invalid push subscription.' });
+  let endpoint;
+  try { endpoint = new URL(sub && sub.endpoint); } catch { return res.status(400).json({ error:'Invalid push subscription.' }); }
+  const host = endpoint.hostname.toLowerCase();
+  const allowedPushHost = host === 'fcm.googleapis.com' || host.endsWith('.push.services.mozilla.com') ||
+    host === 'updates.push.services.mozilla.com' || host.endsWith('.push.apple.com');
+  if (!sub || endpoint.protocol !== 'https:' || !allowedPushHost || sub.endpoint.length > 2048 ||
+      !sub.keys || typeof sub.keys.p256dh !== 'string' || sub.keys.p256dh.length > 256 ||
+      typeof sub.keys.auth !== 'string' || sub.keys.auth.length > 256)
+    return res.status(400).json({ error:'Invalid or unsupported push subscription endpoint.' });
   db.prepare('INSERT INTO push_subscriptions(user_id,endpoint,subscription_json,created_at) VALUES(?,?,?,?) ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id,subscription_json=excluded.subscription_json')
     .run(req.user.id,sub.endpoint,JSON.stringify(sub),nowIso());
   res.json({ ok:true });
@@ -244,7 +256,7 @@ app.delete('/api/v1/push/subscribe', requireAuth, (req,res) => {
   db.prepare('DELETE FROM push_subscriptions WHERE user_id=? AND endpoint=?').run(req.user.id,endpoint);
   res.json({ ok:true });
 });
-app.post('/api/v1/admin/notifications', requireAuth, requireAdmin, (req,res) => {
+app.post('/api/v1/admin/notifications', requireAuth, requireAdmin, authAbuseGuard, (req,res) => {
   const { targetUserId, all, title, body } = req.body || {};
   if (typeof title !== 'string' || !title.trim() || title.trim().length > 100 || typeof body !== 'string' || !body.trim() || body.trim().length > 240)
     return res.status(400).json({ error:'Title is required (max 100 characters) and message must be 1–240 characters.' });
@@ -345,8 +357,9 @@ function handleMessage(user, ws, raw) {
     }
   } else {
     for (const set of online.values()) for (const client of set) send(client,payload);
-    const recipients = db.prepare('SELECT id FROM users WHERE disabled=0 AND id<>?').all(user.id);
-    for (const target of recipients) createNotification(target.id,'message','New public-room message from '+user.username,body);
+    // Public-room unread state is tracked by a cursor. Do not create N notification
+    // rows or N push requests for every public message: that turns one sender into
+    // an O(users) database/push amplifier and makes trivial notification flooding possible.
   }
 }
 let server;
@@ -369,9 +382,24 @@ function start() {
   wss.on('connection',(ws)=>{
     const user=ws.user;
     if (!online.has(user.id)) online.set(user.id,new Set());
-    online.get(user.id).add(ws); send(ws,{type:'connected',protocol:'1.0',user:cleanUser(user)}); publishPresence();
-    ws.on('message',raw=>handleMessage(user,ws,raw));
-    ws.on('close',()=>{ const set=online.get(user.id); if(set){set.delete(ws);if(!set.size)online.delete(user.id);} publishPresence(); });
+    const set = online.get(user.id);
+    // Bound simultaneous sessions per account to reduce connection exhaustion.
+    if (set.size >= 4) {
+      ws.close(4008, 'Too many active connections');
+      if (!set.size) online.delete(user.id);
+      return;
+    }
+    set.add(ws);
+    let windowStarted = Date.now(), messagesInWindow = 0;
+    ws.on('message',raw=>{
+      const now = Date.now();
+      if (now - windowStarted >= 10_000) { windowStarted = now; messagesInWindow = 0; }
+      messagesInWindow += 1;
+      if (messagesInWindow > 40) { ws.close(4008, 'Message rate exceeded'); return; }
+      handleMessage(user,ws,raw);
+    });
+    send(ws,{type:'connected',protocol:'1.0',user:cleanUser(user)}); publishPresence();
+    ws.on('close',()=>{ const current=online.get(user.id); if(current){current.delete(ws);if(!current.size)online.delete(user.id);} publishPresence(); });
   });
   const cleanup = setInterval(()=>db.prepare('DELETE FROM sessions WHERE expires_at < ?').run(Date.now()),3600000);
   cleanup.unref();
