@@ -1,0 +1,18 @@
+{
+  "name": "secure-chat-system",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Cross-platform, UI-first self-hosted text chat server",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "test": "node --test",
+    "check": "node --check src/server.js && node --check src/store.js"
+  },
+  "dependencies": {
+    "better-sqlite3": "^11.8.1",
+    "express": "^5.1.0",
+    "ws": "^8.18.0"
+  }
+}
