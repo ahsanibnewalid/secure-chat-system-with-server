@@ -7,6 +7,7 @@ const express = require('express');
 const { WebSocketServer, WebSocket } = require('ws');
 const webpush = require('web-push');
 const { openStore, hashPassword, verifyPassword } = require('./store');
+const { validUsername, validPassword } = require('./validation');
 
 const env = process.env;
 const host = env.HOST || '127.0.0.1';
@@ -92,8 +93,6 @@ function requireAdmin(req,res,next) {
   if (req.user.role !== 'admin') return res.status(403).json({ error: 'Administrator access required.' });
   next();
 }
-function validUsername(s) { return typeof s === 'string' && /^[a-zA-Z0-9_]{3,24}$/.test(s); }
-function validPassword(s) { return typeof s === 'string' && Buffer.byteLength(s, 'utf8') >= 12 && Buffer.byteLength(s, 'utf8') <= 128; }
 function issueSession(user) {
   const token = randomToken();
   db.prepare('INSERT INTO sessions(token_hash,user_id,created_at,expires_at) VALUES(?,?,?,?)')
