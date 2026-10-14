@@ -17,6 +17,7 @@
 - Unread notifications and administrator announcements to one enabled user or all enabled users.
 - Optional browser Web Push using VAPID keys.
 - Consent-based device diagnostics and optional one-time location sharing.
+- Defensive browser security diagnostics page with transport/header checks, session verification, mixed-content reference review, admin audit access, and local JSON export.
 - Security headers, bounded payloads, input validation, and basic in-process request/message throttling.
 - Windows installer; Linux AppImage and Debian package build targets.
 
@@ -84,6 +85,10 @@ npm run dist
 
 Build artifacts are written to `release/`. See [Desktop apps and builds](docs/DESKTOP-APPS.md).
 
+## Browser security diagnostics
+
+After starting the server, open **[`/security-diagnostics.html`](public/security-diagnostics.html)** on the same origin (for example, `https://your-host/security-diagnostics.html`). It runs non-invasive checks against the current deployment, verifies the signed-in session, and shows audit events only when the server grants administrator access. It does not run browser exploits or remotely control clients. See [Browser Security Diagnostics guide](docs/BROWSER-SECURITY-DIAGNOSTICS.md).
+
 ## Screenshots and operational reports
 
 - **Interface preview:** [open the illustrative SVG](docs/assets/dashboard-preview.svg). It shows the intended chat layout and example activity panel; it is not a live screenshot or real metrics.
@@ -105,6 +110,7 @@ The repository does not currently ship captured screenshots of a live production
 - Rate limiting is in-process and is not a substitute for a reverse proxy/WAF, distributed throttling, or DDoS protection.
 - Device diagnostics require explicit opt-in. Location is optional and permission-based. Browser-reported device properties can be spoofed.
 - Web Push is browser/PWA-only where supported; native APNs/FCM integration is not included.
+- Browser diagnostics are advisory and do not constitute a penetration test or guarantee security.
 - No independent penetration test or formal security certification is claimed.
 
 For security setup, backup/recovery, privacy, and troubleshooting, read [docs/SETUP.md](docs/SETUP.md), [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md), and [docs/SECURITY-OPERATIONS.md](docs/SECURITY-OPERATIONS.md).
@@ -117,6 +123,7 @@ This is a functional self-hosted text-chat foundation, not a claim of a finished
 
 - [Architecture and data flow](docs/ARCHITECTURE.md)
 - [Setup and troubleshooting](docs/SETUP.md)
+- [Browser Security Diagnostics](docs/BROWSER-SECURITY-DIAGNOSTICS.md)
 - [Desktop executable guide](docs/DESKTOP-APPS.md)
 - [Threat model](docs/THREAT-MODEL.md)
 - [Security operations](docs/SECURITY-OPERATIONS.md)
