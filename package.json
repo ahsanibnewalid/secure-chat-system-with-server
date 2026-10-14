@@ -19,7 +19,8 @@
     "better-sqlite3": "^13.0.3",
     "express": "^5.1.0",
     "selfsigned": "^2.4.1",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "electron": "^39.0.0",
