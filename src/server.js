@@ -5,6 +5,7 @@ const https = require('node:https');
 const crypto = require('node:crypto');
 const express = require('express');
 const { WebSocketServer, WebSocket } = require('ws');
+const webpush = require('web-push');
 const { openStore, hashPassword, verifyPassword } = require('./store');
 
 const env = process.env;
@@ -65,6 +66,32 @@ function issueSession(user) {
   return token;
 }
 function record(actor, action, target = null) { audit.run(actor || null, action, target, nowIso()); }
+const vapidPublicKey = env.VAPID_PUBLIC_KEY || '';
+const vapidPrivateKey = env.VAPID_PRIVATE_KEY || '';
+const vapidSubject = env.VAPID_SUBJECT || 'mailto:admin@example.invalid';
+const pushConfigured = !!(vapidPublicKey && vapidPrivateKey);
+if (pushConfigured) webpush.setVapidDetails(vapidSubject, vapidPublicKey, vapidPrivateKey);
+function sendPushToUser(userId, notification) {
+  if (!pushConfigured) return;
+  const subscriptions = db.prepare('SELECT id,subscription_json FROM push_subscriptions WHERE user_id=?').all(userId);
+  for (const sub of subscriptions) {
+    let parsed;
+    try { parsed = JSON.parse(sub.subscription_json); } catch { db.prepare('DELETE FROM push_subscriptions WHERE id=?').run(sub.id); continue; }
+    webpush.sendNotification(parsed, JSON.stringify({ title: notification.title, body: notification.body, url: '/' }))
+      .catch(err => {
+        if (err.statusCode === 404 || err.statusCode === 410) db.prepare('DELETE FROM push_subscriptions WHERE id=?').run(sub.id);
+        else console.error('Web Push delivery failed:', err.statusCode || err.message);
+      });
+  }
+}
+function createNotification(userId, kind, title, body) {
+  const info = db.prepare('INSERT INTO notifications(user_id,kind,title,body,created_at) VALUES(?,?,?,?,?)')
+    .run(userId, kind, String(title).slice(0,100), String(body).slice(0,240), nowIso());
+  const item = db.prepare('SELECT id,kind,title,body,created_at AS createdAt,read_at AS readAt FROM notifications WHERE id=?').get(Number(info.lastInsertRowid));
+  deliver(userId, { type:'notification.new', notification:item });
+  sendPushToUser(userId, item);
+  return item;
+}
 
 app.get('/api/v1/health', (req,res) => {
   try { db.prepare('SELECT 1').get(); res.json({ ok: true, status: 'healthy', uptimeSeconds: Math.floor(process.uptime()), onlineUsers: online.size, protocol: '1.0' }); }
@@ -104,6 +131,56 @@ app.get('/api/v1/me', requireAuth, (req,res) => res.json({ user:cleanUser(req.us
 app.get('/api/v1/users', requireAuth, (req,res) => {
   const users = db.prepare('SELECT id,username,role FROM users WHERE disabled=0 ORDER BY username COLLATE NOCASE').all();
   res.json({ users:users.map(u=>({...u,online:online.has(u.id)})) });
+});
+app.get('/api/v1/notifications', requireAuth, (req,res) => {
+  const notifications = db.prepare('SELECT id,kind,title,body,created_at AS createdAt,read_at AS readAt FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 100').all(req.user.id);
+  const unread = db.prepare('SELECT count(*) AS n FROM notifications WHERE user_id=? AND read_at IS NULL').get(req.user.id).n;
+  res.json({ notifications, unread, pushConfigured:!!(vapidPublicKey && vapidPrivateKey) });
+});
+app.patch('/api/v1/notifications/:id/read', requireAuth, (req,res) => {
+  const id = Number(req.params.id);
+  if (!Number.isSafeInteger(id) || id < 1) return res.status(400).json({ error:'Invalid notification id.' });
+  db.prepare('UPDATE notifications SET read_at=? WHERE id=? AND user_id=? AND read_at IS NULL').run(nowIso(),id,req.user.id);
+  res.json({ ok:true, unread:db.prepare('SELECT count(*) AS n FROM notifications WHERE user_id=? AND read_at IS NULL').get(req.user.id).n });
+});
+app.post('/api/v1/notifications/read-all', requireAuth, (req,res) => {
+  db.prepare('UPDATE notifications SET read_at=? WHERE user_id=? AND read_at IS NULL').run(nowIso(),req.user.id);
+  res.json({ ok:true, unread:0 });
+});
+app.get('/api/v1/push/public-key', requireAuth, (req,res) => {
+  if (!pushConfigured) return res.status(503).json({ error:'Server Web Push keys are not configured.' });
+  res.json({ publicKey:vapidPublicKey });
+});
+app.post('/api/v1/push/subscribe', requireAuth, (req,res) => {
+  if (!pushConfigured) return res.status(503).json({ error:'Server Web Push keys are not configured.' });
+  const sub = req.body && req.body.subscription;
+  if (!sub || typeof sub.endpoint !== 'string' || sub.endpoint.length > 2048 || !sub.keys || typeof sub.keys.p256dh !== 'string' || typeof sub.keys.auth !== 'string')
+    return res.status(400).json({ error:'Invalid push subscription.' });
+  db.prepare('INSERT INTO push_subscriptions(user_id,endpoint,subscription_json,created_at) VALUES(?,?,?,?) ON CONFLICT(endpoint) DO UPDATE SET user_id=excluded.user_id,subscription_json=excluded.subscription_json')
+    .run(req.user.id,sub.endpoint,JSON.stringify(sub),nowIso());
+  res.json({ ok:true });
+});
+app.delete('/api/v1/push/subscribe', requireAuth, (req,res) => {
+  const endpoint = req.body && req.body.endpoint;
+  if (typeof endpoint !== 'string' || endpoint.length > 2048) return res.status(400).json({ error:'Invalid push endpoint.' });
+  db.prepare('DELETE FROM push_subscriptions WHERE user_id=? AND endpoint=?').run(req.user.id,endpoint);
+  res.json({ ok:true });
+});
+app.post('/api/v1/admin/notifications', requireAuth, requireAdmin, (req,res) => {
+  const { targetUserId, all, title, body } = req.body || {};
+  if (typeof title !== 'string' || !title.trim() || title.trim().length > 100 || typeof body !== 'string' || !body.trim() || body.trim().length > 240)
+    return res.status(400).json({ error:'Title is required (max 100 characters) and message must be 1–240 characters.' });
+  let targets;
+  if (all === true) targets = db.prepare('SELECT id FROM users WHERE disabled=0').all().map(u=>u.id);
+  else if (typeof targetUserId === 'string' && targetUserId.length <= 64) {
+    const target = getUser.get(targetUserId);
+    if (!target || target.disabled) return res.status(404).json({ error:'Target user not found or disabled.' });
+    targets = [target.id];
+  } else return res.status(400).json({ error:'Choose one user or set all=true.' });
+  const tx = db.transaction(() => targets.map(id=>createNotification(id,'admin',title.trim(),body.trim())));
+  tx();
+  record(req.user.id,'admin.notification.send',all===true?'all':targetUserId);
+  res.status(201).json({ ok:true, deliveredTo:targets.length });
 });
 app.get('/api/v1/messages/public', requireAuth, (req,res) => {
   const messages = db.prepare(`SELECT m.id,m.body,m.created_at AS createdAt,u.username AS sender FROM messages m JOIN users u ON u.id=m.sender_id WHERE m.recipient_id IS NULL ORDER BY m.id DESC LIMIT 100`).all().reverse();
@@ -180,7 +257,11 @@ function handleMessage(user, ws, raw) {
   const info = db.prepare('INSERT INTO messages(sender_id,recipient_id,body,created_at) VALUES(?,?,?,?)').run(user.id,recipientId,body,createdAt);
   const payload = {type:'message.new',message:{id:Number(info.lastInsertRowid),sender:user.username,body,createdAt,private:!!recipientId}};
   if (recipientId) {
-    deliver(user.id,payload); if (recipientId !== user.id) deliver(recipientId,payload);
+    deliver(user.id,payload);
+    if (recipientId !== user.id) {
+      deliver(recipientId,payload);
+      createNotification(recipientId,'message','New message from '+user.username,body);
+    }
   } else {
     for (const set of online.values()) for (const client of set) send(client,payload);
   }
