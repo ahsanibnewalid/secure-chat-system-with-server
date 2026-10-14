@@ -6,7 +6,7 @@
 
 <p align="center"><strong>Self-hosted, cross-platform text chat for Windows, Linux, and mobile browsers.</strong></p>
 
-> **Preview note:** The image above is a design mockup for documentation, not a screenshot of a running deployment. The repository does not yet include a complete web-based admin dashboard; administrator metrics, users, audit events, and notification history are exposed through authenticated API routes.
+> **Preview note:** The image above is a design mockup for documentation, not a screenshot of a running deployment. The web client now includes a basic administrator user inventory with account-disable controls; audit events and notification history remain available through authenticated API routes.
 
 ## Features
 
@@ -16,7 +16,8 @@
 - Message history, quoted replies, search of currently loaded messages, copy, and per-account/per-conversation local drafts.
 - Unread notifications and administrator announcements to one enabled user or all enabled users.
 - Optional browser Web Push using VAPID keys.
-- Consent-based device diagnostics and optional one-time location sharing.
+- Administrator user inventory, account status, and account-disable/session-revocation controls. The default web client does not offer device-diagnostics or location-sharing controls.
+- Optional admin-only launcher to a separately installed BeEF console via `BEEF_CONSOLE_URL`; this is a link integration, not browser exploitation or remote-control functionality.
 - Security headers, bounded payloads, input validation, and basic in-process request/message throttling.
 - Windows installer; Linux AppImage and Debian package build targets.
 
@@ -103,7 +104,7 @@ The repository does not currently ship captured screenshots of a live production
 - Server-side authorization protects private history and administrator routes. Request bodies and messages have size limits; message text is rendered as text, not HTML.
 - The server can read stored message content. **This is not end-to-end encryption.**
 - Rate limiting is in-process and is not a substitute for a reverse proxy/WAF, distributed throttling, or DDoS protection.
-- Device diagnostics require explicit opt-in. Location is optional and permission-based. Browser-reported device properties can be spoofed.
+- The default web client does not submit device diagnostics or location. The server retains an API for authorized lab integrations; use it only with clearly scoped, enrolled test clients. Browser-reported device properties can be spoofed.
 - Web Push is browser/PWA-only where supported; native APNs/FCM integration is not included.
 - No independent penetration test or formal security certification is claimed.
 

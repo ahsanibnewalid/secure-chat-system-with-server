@@ -55,7 +55,7 @@ curl --cacert certs/server-cert.pem -H "Content-Type: application/json" \
   https://127.0.0.1:8443/api/v1/admin/bootstrap
 ```
 
-The first successful call creates the administrator. Remove `ADMIN_BOOTSTRAP_TOKEN` from the service environment immediately and restart. Never put the token in browser code, source control, a URL, or a public issue. The web admin screens are not yet implemented; the authenticated admin API is available for integration.
+The first successful call creates the administrator. Remove `ADMIN_BOOTSTRAP_TOKEN` from the service environment immediately and restart. Never put the token in browser code, source control, a URL, or a public issue. The web UI includes a basic administrator inventory, account-disable controls, announcements, and an optional launcher for a separately installed BeEF console.
 
 ## 5. Run as a service
 
@@ -73,11 +73,13 @@ npx web-push generate-vapid-keys
 
 Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` in the server environment. Keep the private key secret and never put it in browser code or source control. Restart the server, sign in, then select **Enable push notifications**. Without VAPID configuration, in-app unread notifications still work, but background push is disabled. Push delivery depends on the browser and platform's push service and may not be available in every embedded browser.
 
-## Device diagnostics and privacy
+## User inventory and device-data privacy
 
-The administrator can view aggregate user/online/message metrics and a device inventory only for users who explicitly opt in using **Share basic device diagnostics with server admin**. Collected fields include browser/OS identification, device category, screen dimensions, language, timezone, app version and last report time. Battery level is optional and is collected only when the user enables the battery diagnostics option and the browser exposes the Battery Status API. Browser-reported fields can be spoofed.
+The default web client does not display device-diagnostics, battery-sharing, or location-sharing controls and does not automatically submit browser diagnostics. The administrator console lists registered accounts using the authenticated `/api/v1/admin/users` endpoint and shows account role/status, creation time, registered-device count, and last device-report time when available. Aggregate counts are provided by `/api/v1/admin/metrics`. Administrators can disable a non-admin account from the console, which also revokes that account's active sessions.
 
-The service does not automatically collect contacts, camera/microphone data, or precise location. Users may choose **Share location once** after opting in; location permission is requested by the browser. Users can delete their device record using **Stop sharing device info**. Keep access to the admin API restricted and disclose telemetry practices to users.
+The administrator can optionally add a launcher for a separately installed BeEF console by setting `BEEF_CONSOLE_URL` in the server environment and restarting. The launcher is visible only to authenticated administrators and opens the configured console in a new tab; it does not install BeEF, proxy BeEF API requests, launch browser hooks, or control target browsers. Use HTTPS for remote consoles; plain HTTP is accepted only for localhost loopback lab URLs. Keep BeEF itself bound to a trusted lab network and follow its own authentication and access controls. This chat server never stores BeEF credentials.
+
+The server retains the device-reporting API for explicitly authorized lab integrations, but the standard web UI does not invoke it. Device records already stored in the SQLite database are not automatically deleted by this UI change; review and remove historical records under your data-retention policy if needed. Browser-reported device data is not a trustworthy security signal and must not be treated as proof of identity. The service should not collect private device data or precise location covertly; any lab telemetry beyond basic account/session administration should be clearly scoped to enrolled test clients and documented.
 
 Public-room unread counts are calculated per account from the last public message ID marked read; the current user’s own messages are excluded. The count is per account, not synchronized across devices beyond the server-side cursor.
 

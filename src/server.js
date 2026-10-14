@@ -282,6 +282,20 @@ app.get('/api/v1/messages/private/:username', requireAuth, (req,res) => {
     .all(req.user.id,other.id,other.id,req.user.id).reverse();
   res.json({ messages });
 });
+app.get('/api/v1/admin/integrations/beef', requireAuth, requireAdmin, (req,res) => {
+  const configured = typeof env.BEEF_CONSOLE_URL === 'string' ? env.BEEF_CONSOLE_URL.trim() : '';
+  if (!configured) return res.json({ configured:false, consoleUrl:null });
+  try {
+    const url = new URL(configured);
+    if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password)
+      return res.status(500).json({ error:'BEEF_CONSOLE_URL must be an HTTP(S) URL without embedded credentials.' });
+    if (url.protocol === 'http:' && !['localhost','127.0.0.1','::1'].includes(url.hostname))
+      return res.status(500).json({ error:'Use HTTPS for a non-local BeEF console URL.' });
+    res.json({ configured:true, consoleUrl:url.toString() });
+  } catch {
+    res.status(500).json({ error:'BEEF_CONSOLE_URL is not a valid URL.' });
+  }
+});
 app.get('/api/v1/admin/metrics', requireAuth, requireAdmin, (req,res) => {
   res.json({ uptimeSeconds:Math.floor(process.uptime()), onlineUsers:online.size,
     users:db.prepare('SELECT count(*) n FROM users').get().n,
