@@ -1,70 +1,123 @@
 # Secure Chat System
 
-A cross-platform, self-hosted, UI-first **text chat** system. The server uses Node.js, HTTPS/WSS and SQLite; the responsive browser client works on desktop and mobile browsers.
+<p align="center">
+  <img src="docs/assets/dashboard-preview.svg" alt="Illustrative Secure Chat interface mockup" width="100%">
+</p>
 
-## Desktop executable
+<p align="center"><strong>Self-hosted, cross-platform text chat for Windows, Linux, and mobile browsers.</strong></p>
 
-The desktop shell adds a graphical server manager and a separate chat window. After installing the OS-specific package, a user can double-click **Secure Chat**, press **Start server**, then **Open local chat**—no terminal is required for normal start/stop. It can also open a remote HTTPS server in a client window.
+> **Preview note:** The image above is a design mockup for documentation, not a screenshot of a running deployment. The repository does not yet include a complete web-based admin dashboard; administrator metrics, users, audit events, and notification history are exposed through authenticated API routes.
 
-- Windows: NSIS installer producing a Windows executable installer.
-- Linux: AppImage and Debian package.
-- Local only on `127.0.0.1:8443` is the default. The Server settings panel supports port changes, Local network mode, registration control, message-length limits and session lifetime.
-- Server database, local TLS certificate and logs are stored in the current OS user's application-data folder.
-- LAN mode shows private IP connection URLs, but Android/iOS browsers still need a certificate they trust. For internet access, use a public hostname with a publicly trusted certificate and correctly configured hosting/firewall.
+## Features
 
-See [Desktop executable builds](docs/DESKTOP-APPS.md) for packaging, security notes and limitations.
+- Node.js + Express HTTPS API, WSS chat, and SQLite persistence.
+- Responsive browser client / installable PWA; Electron desktop manager and chat window.
+- Account registration/login, server-side sessions and private-message authorization.
+- Message history, quoted replies, search of currently loaded messages, copy, and per-account/per-conversation local drafts.
+- Unread notifications and administrator announcements to one enabled user or all enabled users.
+- Optional browser Web Push using VAPID keys.
+- Consent-based device diagnostics and optional one-time location sharing.
+- Security headers, bounded payloads, input validation, and basic in-process request/message throttling.
+- Windows installer; Linux AppImage and Debian package build targets.
 
-## Build the desktop app (developers)
+## Architecture
 
-Requires Node.js 20+ and npm. Build each OS on its own runner/machine.
+See [Architecture, data flow, and trust boundaries](docs/ARCHITECTURE.md) for Mermaid diagrams and a security-boundary explanation.
 
-```powershell
-npm install
+```mermaid
+flowchart LR
+    Client["Browser / PWA / desktop client"] -->|"HTTPS + WSS"| API["Node.js / Express"]
+    API --> Auth["Session + authorization"]
+    Auth --> Store[("SQLite")]
+    API -. optional .-> Push["Web Push (VAPID)"]
+```
+
+## How to install
+
+### Option A — Desktop app (recommended for non-technical users)
+
+1. Open the repository's [Releases page](https://github.com/ahsanibnewalid/secure-chat-system-with-server/releases).
+2. Download the installer for your operating system if a release is available:
+   - **Windows:** `Secure-Chat-Setup-<version>.exe`
+   - **Linux:** `Secure-Chat-<version>.AppImage` or `.deb`
+3. Install/open **Secure Chat**. In the desktop manager, choose **Start server**, then **Open local chat**.
+4. Use the server settings to change the port or enable LAN mode only when you understand the network and TLS implications.
+
+If no release artifact is published yet, use Option B to run from source or build the desktop package. Builds may be unsigned and trigger operating-system warnings.
+
+### Option B — Run from source (Windows or Linux)
+
+**Requirements:** Node.js 22+ (matching `package.json`), npm, and OpenSSL for the development certificate.
+
+1. Clone and enter the project:
+
+   ```sh
+   git clone https://github.com/ahsanibnewalid/secure-chat-system-with-server.git
+   cd secure-chat-system-with-server
+   npm install
+   ```
+
+2. Follow the certificate and environment setup in [docs/SETUP.md](docs/SETUP.md). Create a development TLS certificate, copy `.env.example` to `.env`, and configure the key/certificate paths and a strong one-time admin bootstrap token. Do not commit `.env`, private keys, database files, or real user data.
+3. Start the server:
+
+   ```sh
+   node --env-file=.env src/server.js
+   ```
+
+4. Open the configured HTTPS URL, typically `https://127.0.0.1:8443`, using a browser that trusts the certificate. A self-signed development certificate may show a warning and is not automatically trusted by phones.
+5. Create the first administrator by following the **Create the first administrator** section in [docs/SETUP.md](docs/SETUP.md). Remove `ADMIN_BOOTSTRAP_TOKEN` from the environment and restart immediately after successful bootstrap.
+
+Windows PowerShell supports the same Node command. Keep the host bound to localhost during initial setup. For LAN or internet access, use a trusted certificate for the hostname clients will visit and configure the firewall deliberately.
+
+### Verify the checkout
+
+```sh
 npm run check
 npm test
+```
+
+To build the desktop package on the operating system you are building for:
+
+```sh
 npm run dist
 ```
 
-Run `npm run desktop:dev` to test the desktop manager from source. Distributables are written to `release/`. GitHub Actions also builds Windows and Linux artifacts when manually dispatched or when a `v*` tag is pushed. Unsigned builds may display OS security warnings.
+Build artifacts are written to `release/`. See [Desktop apps and builds](docs/DESKTOP-APPS.md).
 
-## Browser/server development
+## Screenshots and operational reports
 
-1. Install dependencies with `npm install`.
-2. Follow [docs/SETUP.md](docs/SETUP.md) to configure a TLS certificate and environment variables.
-3. Start the server for development with `node --env-file=.env src/server.js`.
-4. Open the configured HTTPS URL in a browser that trusts the certificate.
+- **Interface preview:** [open the illustrative SVG](docs/assets/dashboard-preview.svg). It shows the intended chat layout and example activity panel; it is not a live screenshot or real metrics.
+- **Architecture diagrams:** [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+- **Live health output:** request `GET /api/v1/health` from the configured server URL.
+- **Admin metrics:** `GET /api/v1/admin/metrics`.
+- **Admin user inventory:** `GET /api/v1/admin/users`.
+- **Audit events:** `GET /api/v1/admin/audit`.
+- **Admin notification history:** `GET /api/v1/admin/notifications`.
 
-Normal end users of the desktop package do not need to run these development commands.
+The repository does not currently ship captured screenshots of a live production dashboard. To document a real deployment, run the app locally, capture the actual UI and sanitized API output, and replace/add images without exposing usernames, IP addresses, session tokens, notification contents, or other private data.
 
-## Security
+## Security model and limitations
 
-- TLS 1.2+ required; the server refuses to start without a certificate and private key.
-- Passwords use Node.js scrypt with per-account random salts.
-- Random bearer session tokens are stored as SHA-256 hashes.
-- Server-side authorization protects private history and admin routes.
-- Message input and JSON request sizes are bounded; messages render as text, not HTML.
-- No arbitrary shell-execution endpoint and no secrets embedded in the browser bundle.
-- **No end-to-end encryption claim.** TLS protects transport between each client and server.
-- The desktop app pins its generated certificate only for its own localhost client. Remote servers use normal Chromium certificate verification.
+- TLS 1.2+ is required; the server refuses to start without a certificate and private key.
+- Passwords use Node.js scrypt with per-account random salts. Session tokens are random bearer tokens stored as SHA-256 hashes.
+- Server-side authorization protects private history and administrator routes. Request bodies and messages have size limits; message text is rendered as text, not HTML.
+- The server can read stored message content. **This is not end-to-end encryption.**
+- Rate limiting is in-process and is not a substitute for a reverse proxy/WAF, distributed throttling, or DDoS protection.
+- Device diagnostics require explicit opt-in. Location is optional and permission-based. Browser-reported device properties can be spoofed.
+- Web Push is browser/PWA-only where supported; native APNs/FCM integration is not included.
+- No independent penetration test or formal security certification is claimed.
 
-## Implemented API surface
+For security setup, backup/recovery, privacy, and troubleshooting, read [docs/SETUP.md](docs/SETUP.md), [docs/THREAT-MODEL.md](docs/THREAT-MODEL.md), and [docs/SECURITY-OPERATIONS.md](docs/SECURITY-OPERATIONS.md).
 
-All endpoints use the versioned `/api/v1` prefix.
+## Project status
 
-- `GET /api/v1/health` — live process and database health.
-- `GET /api/v1/protocol` — SCSP protocol version 1.0.
-- `POST /api/v1/auth/register`, `POST /api/v1/auth/login`, `POST /api/v1/auth/logout`.
-- `GET /api/v1/me`, `GET /api/v1/users`.
-- `GET /api/v1/messages/public`, `GET /api/v1/messages/private/:username`.
-- Admin: `GET /api/v1/admin/metrics`, `GET /api/v1/admin/users`, `POST /api/v1/admin/users/:id/disable`, `GET /api/v1/admin/audit`.
-- One-time initial admin creation: `POST /api/v1/admin/bootstrap` using the `X-Bootstrap-Token` header.
+This is a functional self-hosted text-chat foundation, not a claim of a finished enterprise messaging platform. The guided admin-bootstrap wizard, full web admin dashboard, automatic public TLS provisioning, OS service installer, auto-updates, signed release binaries, and native Android/iOS apps are not yet included.
 
-The WebSocket endpoint is `/ws` over WSS and requires a valid session token in the `scsp.<token>` subprotocol. Messages are persisted in SQLite; offline messages are retrieved through history APIs rather than pushed while a user is disconnected.
+## Documentation
 
-## Important limitations
-
-This is a functional foundation, not yet the entire product roadmap. The desktop manager still does not include a guided admin-bootstrap wizard, automatic public TLS provisioning, an OS background-service installer, auto-updates, signed release binaries, native Android/iOS clients, or a complete web admin dashboard. The generated local certificate is self-signed and is not automatically trusted by external phones or browsers, even when LAN mode is enabled. For reliable mobile access, use a certificate/CA trusted by each client, or a public hostname with a publicly trusted certificate. Do not expose the default localhost server directly to the internet.
-
+- [Architecture and data flow](docs/ARCHITECTURE.md)
 - [Setup and troubleshooting](docs/SETUP.md)
 - [Desktop executable guide](docs/DESKTOP-APPS.md)
-- [Roadmap and acceptance gates](docs/ROADMAP.md)
+- [Threat model](docs/THREAT-MODEL.md)
+- [Security operations](docs/SECURITY-OPERATIONS.md)
+- [Roadmap](docs/ROADMAP.md)
