@@ -1,6 +1,8 @@
 # Setup (Windows and Linux)
 
-The server uses Node.js and SQLite so the same source runs natively on Windows and Linux. WSL is not required. Install a current Node.js LTS release (20 or newer) from https://nodejs.org/.
+The server uses Node.js and SQLite, so the same source runs natively on Windows and Linux. WSL is not required. Install Node.js 22 or newer from https://nodejs.org/.
+
+For the project overview and shortest installation path, start with the [README](../README.md). Architecture diagrams are in [ARCHITECTURE.md](ARCHITECTURE.md).
 
 ## 1. Install dependencies
 
@@ -24,7 +26,7 @@ openssl req -x509 -newkey rsa:3072 -sha256 -nodes -days 30 \
 
 Windows PowerShell can run the same OpenSSL command if OpenSSL is installed; create the `certs` directory first with `New-Item -ItemType Directory certs`. Do not expose the private key or commit certificates. For public hosting, use a certificate from a trusted CA and include the actual DNS name in its SAN.
 
-## 3. Configure
+## 3. Configure and start
 
 Copy `.env.example` to `.env`, then set `TLS_KEY`, `TLS_CERT`, `HOST`, and `PORT` as needed. Node does not load `.env` automatically on every supported version: export variables in the service manager, or use Node's `--env-file=.env` option. Keep `HOST=127.0.0.1` until TLS, firewall, and admin access are configured. To allow other devices on the LAN, bind to the server's LAN address and permit the chosen TCP port in the firewall.
 
@@ -73,7 +75,9 @@ Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` in the server e
 
 ## Device diagnostics and privacy
 
-The administrator can view aggregate user/online/message metrics and a device inventory only for users who explicitly opt in using **Share basic device diagnostics with server admin**. Collected fields include browser/OS identification, device category, screen dimensions, language, timezone, app version and last report time. The service does not automatically collect IP addresses, contacts, camera/microphone data, or precise location. Users may choose **Share location once** after opting in; location permission is requested by the browser. Battery telemetry is not collected by this build. Users can delete their device record using **Stop sharing device info**. Keep access to the admin API restricted and disclose telemetry practices to users.
+The administrator can view aggregate user/online/message metrics and a device inventory only for users who explicitly opt in using **Share basic device diagnostics with server admin**. Collected fields include browser/OS identification, device category, screen dimensions, language, timezone, app version and last report time. Battery level is optional and is collected only when the user enables the battery diagnostics option and the browser exposes the Battery Status API. Browser-reported fields can be spoofed.
+
+The service does not automatically collect contacts, camera/microphone data, or precise location. Users may choose **Share location once** after opting in; location permission is requested by the browser. Users can delete their device record using **Stop sharing device info**. Keep access to the admin API restricted and disclose telemetry practices to users.
 
 Public-room unread counts are calculated per account from the last public message ID marked read; the current user’s own messages are excluded. The count is per account, not synchronized across devices beyond the server-side cursor.
 
