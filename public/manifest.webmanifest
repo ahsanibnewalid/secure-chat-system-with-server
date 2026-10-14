@@ -1,0 +1,10 @@
+{
+  "name": "Secure Chat",
+  "short_name": "Secure Chat",
+  "description": "Self-hosted private text chat",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0b1220",
+  "theme_color": "#101827"
+}
