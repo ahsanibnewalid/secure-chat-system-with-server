@@ -130,7 +130,53 @@ app.post('/api/v1/auth/logout', requireAuth, (req,res) => {
 app.get('/api/v1/me', requireAuth, (req,res) => res.json({ user:cleanUser(req.user) }));
 app.get('/api/v1/users', requireAuth, (req,res) => {
   const users = db.prepare('SELECT id,username,role FROM users WHERE disabled=0 ORDER BY username COLLATE NOCASE').all();
-  res.json({ users:users.map(u=>({...u,online:online.has(u.id)})) });
+  res.json({ users:users.map(u=>({...u,online:online.has(u.id)})), total:db.prepare('SELECT count(*) AS n FROM users').get().n, enabled:db.prepare('SELECT count(*) AS n FROM users WHERE disabled=0').get().n, disabled:db.prepare('SELECT count(*) AS n FROM users WHERE disabled=1').get().n });
+});
+app.get('/api/v1/room/unread', requireAuth, (req,res) => {
+  const state = db.prepare('SELECT last_read_public_message_id AS lastRead FROM user_state WHERE user_id=?').get(req.user.id);
+  const lastRead = state ? state.lastRead : 0;
+  const unread = db.prepare('SELECT count(*) AS n FROM messages WHERE recipient_id IS NULL AND id>? AND sender_id<>?').get(lastRead,req.user.id).n;
+  res.json({ unread, lastReadMessageId:lastRead });
+});
+app.post('/api/v1/room/read', requireAuth, (req,res) => {
+  const latest = db.prepare('SELECT coalesce(max(id),0) AS id FROM messages WHERE recipient_id IS NULL').get().id;
+  db.prepare('INSERT INTO user_state(user_id,last_read_public_message_id) VALUES(?,?) ON CONFLICT(user_id) DO UPDATE SET last_read_public_message_id=max(last_read_public_message_id,excluded.last_read_public_message_id)').run(req.user.id,latest);
+  res.json({ ok:true, unread:0, lastReadMessageId:latest });
+});
+app.put('/api/v1/device', requireAuth, (req,res) => {
+  const d=req.body||{};
+  if (d.consent !== true) return res.status(400).json({ error:'Device diagnostics require explicit consent.' });
+  if (typeof d.deviceId !== 'string' || !/^[a-f0-9-]{16,64}$/i.test(d.deviceId)) return res.status(400).json({ error:'Invalid device identifier.' });
+  const textField=(v,max)=>typeof v==='string'?v.trim().slice(0,max):null;
+  const integerField=(v,min,max)=>Number.isInteger(v)&&v>=min&&v<=max?v:null;
+  const numberField=(v,min,max)=>typeof v==='number'&&Number.isFinite(v)&&v>=min&&v<=max?v:null;
+  const now=nowIso();
+  const vals={
+    id:d.deviceId,userId:req.user.id,label:textField(d.label,80)||'This device',
+    deviceType:textField(d.deviceType,24)||'unknown',browser:textField(d.browser,80)||'unknown',
+    os:textField(d.os,80)||'unknown',screenWidth:integerField(d.screenWidth,0,20000),
+    screenHeight:integerField(d.screenHeight,0,20000),timezone:textField(d.timezone,80),
+    language:textField(d.language,35),appVersion:textField(d.appVersion,40),
+    batteryLevel:integerField(d.batteryLevel,0,100),batteryCharging:typeof d.batteryCharging==='boolean'?(d.batteryCharging?1:0):null,
+    locationLat:numberField(d.locationLat,-90,90),locationLng:numberField(d.locationLng,-180,180),
+    locationSharedAt:d.locationLat!=null&&d.locationLng!=null?now:null,consentAt:now,lastSeenAt:now,createdAt:now
+  };
+  db.prepare(`INSERT INTO devices(id,user_id,label,device_type,browser,os,screen_width,screen_height,timezone,language,app_version,battery_level,battery_charging,location_lat,location_lng,location_shared_at,consent_at,last_seen_at,created_at)
+    VALUES(@id,@userId,@label,@deviceType,@browser,@os,@screenWidth,@screenHeight,@timezone,@language,@appVersion,@batteryLevel,@batteryCharging,@locationLat,@locationLng,@locationSharedAt,@consentAt,@lastSeenAt,@createdAt)
+    ON CONFLICT(id) DO UPDATE SET user_id=excluded.user_id,label=excluded.label,device_type=excluded.device_type,browser=excluded.browser,os=excluded.os,screen_width=excluded.screen_width,screen_height=excluded.screen_height,timezone=excluded.timezone,language=excluded.language,app_version=excluded.app_version,battery_level=excluded.battery_level,battery_charging=excluded.battery_charging,location_lat=excluded.location_lat,location_lng=excluded.location_lng,location_shared_at=excluded.location_shared_at,consent_at=excluded.consent_at,last_seen_at=excluded.last_seen_at`).run(vals);
+  res.json({ ok:true, deviceId:d.deviceId, recordedAt:now });
+});
+app.delete('/api/v1/device/:id', requireAuth, (req,res) => {
+  db.prepare('DELETE FROM devices WHERE id=? AND user_id=?').run(req.params.id,req.user.id);
+  res.json({ ok:true });
+});
+app.get('/api/v1/admin/devices', requireAuth, requireAdmin, (req,res) => {
+  const devices=db.prepare(`SELECT d.id,d.user_id AS userId,u.username,d.label,d.device_type AS deviceType,d.browser,d.os,d.screen_width AS screenWidth,d.screen_height AS screenHeight,d.timezone,d.language,d.app_version AS appVersion,d.battery_level AS batteryLevel,d.battery_charging AS batteryCharging,d.location_lat AS locationLat,d.location_lng AS locationLng,d.location_shared_at AS locationSharedAt,d.consent_at AS consentAt,d.last_seen_at AS lastSeenAt FROM devices d JOIN users u ON u.id=d.user_id WHERE u.disabled=0 ORDER BY d.last_seen_at DESC LIMIT 1000`).all();
+  res.json({ devices, total:devices.length, privacy:'Only devices whose users explicitly opted in are listed. IP addresses and precise location are not collected automatically.' });
+});
+app.get('/api/v1/admin/notifications', requireAuth, requireAdmin, (req,res) => {
+  const notifications=db.prepare(`SELECT n.id,n.user_id AS userId,u.username,n.kind,n.title,n.body,n.created_at AS createdAt,n.read_at AS readAt FROM notifications n JOIN users u ON u.id=n.user_id ORDER BY n.id DESC LIMIT 200`).all();
+  res.json({ notifications });
 });
 app.get('/api/v1/notifications', requireAuth, (req,res) => {
   const notifications = db.prepare('SELECT id,kind,title,body,created_at AS createdAt,read_at AS readAt FROM notifications WHERE user_id=? ORDER BY id DESC LIMIT 100').all(req.user.id);
@@ -201,7 +247,10 @@ app.get('/api/v1/admin/metrics', requireAuth, requireAdmin, (req,res) => {
     database:'connected', memoryBytes:process.memoryUsage().rss });
 });
 app.get('/api/v1/admin/users', requireAuth, requireAdmin, (req,res) => {
-  res.json({ users:db.prepare('SELECT id,username,role,disabled,created_at AS createdAt FROM users ORDER BY created_at DESC LIMIT 500').all() });
+  res.json({ users:db.prepare(`SELECT u.id,u.username,u.role,u.disabled,u.created_at AS createdAt,
+    (SELECT max(d.last_seen_at) FROM devices d WHERE d.user_id=u.id) AS lastDeviceSeen,
+    (SELECT count(*) FROM devices d WHERE d.user_id=u.id) AS registeredDevices
+    FROM users u ORDER BY u.created_at DESC LIMIT 500`).all() });
 });
 app.post('/api/v1/admin/users/:id/disable', requireAuth, requireAdmin, (req,res) => {
   if (req.params.id === req.user.id) return res.status(400).json({ error:'You cannot disable your own account.' });
