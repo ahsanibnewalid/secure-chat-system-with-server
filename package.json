@@ -8,7 +8,7 @@
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
-    "desktop:dev": "electron .",
+    "desktop:dev": "electron-builder install-app-deps && electron .",
     "dist": "electron-builder --publish never",
     "test": "node --test",
     "check": "node --check src/server.js && node --check src/store.js && node --check desktop/main.cjs && node --check desktop/preload.cjs"
