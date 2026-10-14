@@ -13,13 +13,14 @@
     "desktop:dev": "electron-builder install-app-deps && electron .",
     "dist": "electron-builder --publish never",
     "test": "node --test",
-    "check": "node --check src/server.js && node --check src/store.js && node --check desktop/main.cjs && node --check desktop/preload.cjs"
+    "check": "node --check src/server.js && node --check src/store.js && node --check src/validation.js && node --check desktop/main.cjs && node --check desktop/preload.cjs"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",
     "express": "^5.1.0",
     "selfsigned": "^2.4.1",
-    "ws": "^8.18.0"
+    "ws": "^8.18.0",
+    "web-push": "^3.6.7"
   },
   "devDependencies": {
     "electron": "^39.0.0",
