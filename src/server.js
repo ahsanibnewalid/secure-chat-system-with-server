@@ -214,6 +214,7 @@ function start() {
   server.listen(port,host,()=>console.log('Secure Chat listening on https://'+host+':'+port));
   const shutdown=()=>{ console.log('Shutting down gracefully…'); for(const set of online.values())for(const ws of set)ws.close(1001,'Server shutting down'); server.close(()=>{db.close();process.exit(0)}); setTimeout(()=>process.exit(1),10000).unref(); };
   process.once('SIGINT',shutdown); process.once('SIGTERM',shutdown);
+  if (process.send) process.on('message', message => { if (message && message.type === 'shutdown') shutdown(); });
 }
 if (require.main === module) start();
 module.exports = { validUsername, validPassword };
