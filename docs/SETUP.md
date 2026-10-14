@@ -59,6 +59,18 @@ The first successful call creates the administrator. Remove `ADMIN_BOOTSTRAP_TOK
 
 For a reliable installation, configure a Windows Service using your organization's approved service wrapper, or a systemd unit on Linux. Run as a dedicated low-privilege OS account, grant it write access only to the data directory, restrict the port at the firewall, and keep Node and dependencies patched. Service-wrapper packaging and graphical setup wizard are planned, not yet included.
 
+## Notifications and browser push
+
+Notifications are stored in SQLite and survive sign-out/restart. Private messages create an unread notification for the recipient; the administrator can send an announcement to one account or all enabled accounts from the signed-in chat UI. Browser background push requires a secure HTTPS origin, user permission, and VAPID keys.
+
+Generate VAPID keys with:
+
+```sh
+npx web-push generate-vapid-keys
+```
+
+Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` in the server environment. Keep the private key secret and never put it in browser code or source control. Restart the server, sign in, then select **Enable push notifications**. Without VAPID configuration, in-app unread notifications still work, but background push is disabled. Push delivery depends on the browser and platform's push service and may not be available in every embedded browser.
+
 ## Data, backup, and recovery
 
 The SQLite database is `data/chat.sqlite` (with transient WAL files while running). Stop the server cleanly before copying the database for a simple consistent backup. Restore only a verified backup while the service is stopped, preserve restrictive filesystem permissions, then start and check `/api/v1/health`. Automated backup validation/restoration UI is not yet implemented. Keep backup copies encrypted and access-controlled.
