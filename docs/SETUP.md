@@ -71,6 +71,16 @@ npx web-push generate-vapid-keys
 
 Set `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, and `VAPID_SUBJECT` in the server environment. Keep the private key secret and never put it in browser code or source control. Restart the server, sign in, then select **Enable push notifications**. Without VAPID configuration, in-app unread notifications still work, but background push is disabled. Push delivery depends on the browser and platform's push service and may not be available in every embedded browser.
 
+## Device diagnostics and privacy
+
+The administrator can view aggregate user/online/message metrics and a device inventory only for users who explicitly opt in using **Share basic device diagnostics with server admin**. Collected fields include browser/OS identification, device category, screen dimensions, language, timezone, app version and last report time. The service does not automatically collect IP addresses, contacts, camera/microphone data, or precise location. Users may choose **Share location once** after opting in; location permission is requested by the browser. Battery telemetry is not collected by this build. Users can delete their device record using **Stop sharing device info**. Keep access to the admin API restricted and disclose telemetry practices to users.
+
+Public-room unread counts are calculated per account from the last public message ID marked read; the current user’s own messages are excluded. The count is per account, not synchronized across devices beyond the server-side cursor.
+
+## Mobile installation and push
+
+The web client is installable as a PWA on compatible browsers. Browser Web Push works only where the browser/platform supports service workers and push, with HTTPS, permission, and VAPID keys configured. This is not the same as native APNs/FCM integration: native iOS/Android push delivery requires platform app packaging and Apple/Google credentials and is not included in this web-only build.
+
 ## Data, backup, and recovery
 
 The SQLite database is `data/chat.sqlite` (with transient WAL files while running). Stop the server cleanly before copying the database for a simple consistent backup. Restore only a verified backup while the service is stopped, preserve restrictive filesystem permissions, then start and check `/api/v1/health`. Automated backup validation/restoration UI is not yet implemented. Keep backup copies encrypted and access-controlled.
