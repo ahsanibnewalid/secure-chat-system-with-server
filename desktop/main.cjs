@@ -40,9 +40,9 @@ function lanAddresses() {
 }
 
 function ensureDirectories() { for (const dir of [dataDir, certDir, logDir]) fs.mkdirSync(dir, { recursive: true }); }
-async function ensureCertificate() {
+async function ensureCertificate(force = false) {
   ensureDirectories();
-  if (!fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
+  if (force || !fs.existsSync(keyPath) || !fs.existsSync(certPath)) {
     const generated = await selfsigned.generate([{ name: 'commonName', value: 'localhost' }], {
       keySize: 2048, days: 365,
       extensions: [{ name: 'subjectAltName', altNames: [{ type: 2, value: 'localhost' }, { type: 7, ip: '127.0.0.1' }, ...lanAddresses().map(ip => ({ type: 7, ip }))] }]
@@ -56,7 +56,7 @@ function setLocalCertificateTrust() {
   session.defaultSession.setCertificateVerifyProc((request, callback) => {
     const fingerprint = request.certificate && (request.certificate.fingerprint256 || request.certificate.fingerprint)
       ? (request.certificate.fingerprint256 || request.certificate.fingerprint).replace(/:/g, '').toLowerCase() : '';
-    if (['localhost', '127.0.0.1'].includes(request.hostname) && fingerprint && fingerprint === localFingerprint) callback(0);
+    if (['localhost', '127.0.0.1', ...lanAddresses()].includes(request.hostname) && fingerprint && fingerprint === localFingerprint) callback(0);
     else callback(-2);
   });
 }
