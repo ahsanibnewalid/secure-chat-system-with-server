@@ -313,6 +313,8 @@ function handleMessage(user, ws, raw) {
     }
   } else {
     for (const set of online.values()) for (const client of set) send(client,payload);
+    const recipients = db.prepare('SELECT id FROM users WHERE disabled=0 AND id<>?').all(user.id);
+    for (const target of recipients) createNotification(target.id,'message','New public-room message from '+user.username,body);
   }
 }
 let server;
