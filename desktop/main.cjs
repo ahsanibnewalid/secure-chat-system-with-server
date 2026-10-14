@@ -28,8 +28,8 @@ async function ensureCertificate() {
 }
 function setLocalCertificateTrust() {
   session.defaultSession.setCertificateVerifyProc((request, callback) => {
-    const fingerprint = request.certificate && request.certificate.fingerprint
-      ? request.certificate.fingerprint.replace(/:/g, '').toLowerCase() : '';
+    const fingerprint = request.certificate && (request.certificate.fingerprint256 || request.certificate.fingerprint)
+      ? (request.certificate.fingerprint256 || request.certificate.fingerprint).replace(/:/g, '').toLowerCase() : '';
     if (['localhost', '127.0.0.1'].includes(request.hostname) && fingerprint && fingerprint === localFingerprint) callback(0);
     else callback(-2);
   });
@@ -52,7 +52,7 @@ async function startServer() {
   const script = path.join(app.getAppPath(), 'src', 'server.js');
   const childEnv = { ...process.env, ELECTRON_RUN_AS_NODE: '1', HOST: '127.0.0.1', PORT: String(port), DATA_DIR: dataDir, TLS_KEY: keyPath, TLS_CERT: certPath, ALLOW_REGISTRATION: 'true' };
   delete childEnv.ADMIN_BOOTSTRAP_TOKEN;
-  const child = spawn(process.execPath, [script], { cwd: userData, env: childEnv, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
+  const child = spawn(process.execPath, [script], { cwd: userData, env: childEnv, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe', 'ipc'] });
   serverProcess = child;
   child.stdout.on('data', b => { const s = b.toString(); logLine(s.trimEnd()); if (s.includes('Secure Chat listening')) { serverState = 'running'; notifyStatus(); } });
   child.stderr.on('data', b => { const s = b.toString(); logLine('ERROR ' + s.trimEnd()); serverError = s.trim().slice(-500); notifyStatus(); });
@@ -69,9 +69,9 @@ async function startServer() {
 }
 function stopServer() {
   if (!serverProcess) { serverState = 'stopped'; notifyStatus(); return { ok: true, state: serverState }; }
-  serverState = 'stopping'; serverProcess.kill('SIGTERM');
+  serverState = 'stopping'; if (serverProcess.connected) serverProcess.send({ type: 'shutdown' }); else serverProcess.kill('SIGTERM');
   const child = serverProcess;
-  const fallback = setTimeout(() => { if (serverProcess === child) child.kill('SIGKILL'); }, 8000); fallback.unref();
+  const fallback = setTimeout(() => { if (serverProcess === child) child.kill('SIGTERM'); }, 8000); fallback.unref();
   notifyStatus();
   return { ok: true, state: serverState, message: 'Stopping server…' };
 }
@@ -91,5 +91,5 @@ ipcMain.handle('server:status', () => status());
 ipcMain.handle('client:open', (_event, url) => openClient(url));
 ipcMain.handle('app:open-logs', async () => { ensureDirectories(); return shell.openPath(path.join(logDir, 'server.log')); });
 app.whenReady().then(async () => { ensureDirectories(); await ensureCertificate(); setLocalCertificateTrust(); createWindow(); app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); }); });
-app.on('before-quit', () => { if (serverProcess) { serverState = 'stopping'; serverProcess.kill('SIGTERM'); } });
+app.on('before-quit', () => { if (serverProcess) { serverState = 'stopping'; if (serverProcess.connected) serverProcess.send({ type: 'shutdown' }); else serverProcess.kill('SIGTERM'); } });
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
