@@ -1,18 +1,67 @@
 {
   "name": "secure-chat-system",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
-  "description": "Cross-platform, UI-first self-hosted text chat server",
-  "engines": { "node": ">=20" },
+  "description": "Cross-platform, UI-first self-hosted text chat with desktop manager",
+  "main": "desktop/main.cjs",
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "start": "node src/server.js",
     "dev": "node --watch src/server.js",
+    "desktop:dev": "electron-builder install-app-deps && electron .",
+    "dist": "electron-builder --publish never",
     "test": "node --test",
-    "check": "node --check src/server.js && node --check src/store.js"
+    "check": "node --check src/server.js && node --check src/store.js && node --check desktop/main.cjs && node --check desktop/preload.cjs"
   },
   "dependencies": {
-    "better-sqlite3": "^11.8.1",
+    "better-sqlite3": "^13.0.3",
     "express": "^5.1.0",
+    "selfsigned": "^2.4.1",
     "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "^39.0.0",
+    "electron-builder": "^26.0.12"
+  },
+  "build": {
+    "appId": "org.securechatsystem.desktop",
+    "productName": "Secure Chat",
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/better-sqlite3/**/*"
+    ],
+    "files": [
+      "src/**/*",
+      "public/**/*",
+      "desktop/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "nsis"
+      ],
+      "artifactName": "Secure-Chat-Setup-${version}.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
+    },
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Network",
+      "artifactName": "Secure-Chat-${version}.${ext}"
+    },
+    "npmRebuild": false,
+    "buildDependenciesFromSource": false
   }
 }
