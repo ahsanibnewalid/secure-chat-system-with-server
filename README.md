@@ -6,7 +6,7 @@
 
 <p align="center"><strong>Self-hosted, cross-platform text chat for Windows, Linux, and mobile browsers.</strong></p>
 
- > **Preview note:** The image above is a design mockup for documentation, not a screenshot of a running deployment. The web client now includes a basic administrator user inventory with account-disable controls; audit events and notification history remain available through authenticated API routes.
+> **Preview note:** The image above is a design mockup for documentation, not a screenshot of a running deployment. The web client now includes a basic administrator user inventory with account-disable controls; audit events and notification history remain available through authenticated API routes.
 
 ## Features
 
