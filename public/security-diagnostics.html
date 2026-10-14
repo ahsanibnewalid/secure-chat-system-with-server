@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>Security Diagnostics · Secure Chat</title>
+<style>
+:root{color-scheme:dark;--bg:#0b1220;--panel:#121c2e;--line:#26354d;--text:#e8eef8;--muted:#9aabc2;--good:#4ade80;--warn:#fbbf24;--bad:#fb7185;--accent:#7dd3fc}
+*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:15px/1.55 system-ui,-apple-system,Segoe UI,sans-serif}header,main{max-width:1080px;margin:auto;padding:22px}header{border-bottom:1px solid var(--line)}h1{margin:0;font-size:clamp(1.5rem,4vw,2.2rem)}h2{font-size:1.1rem;margin:0 0 12px}p{color:var(--muted)}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:16px;min-width:0}.result{padding:10px 0;border-bottom:1px solid var(--line)}.result:last-child{border:0}.status{font-size:.75rem;text-transform:uppercase;letter-spacing:.06em;font-weight:800}.pass{color:var(--good)}.warn{color:var(--warn)}.fail{color:var(--bad)}button,a.btn{display:inline-block;background:#193c59;color:var(--text);border:1px solid #315775;border-radius:9px;padding:10px 13px;text-decoration:none;font:inherit;cursor:pointer;margin:4px 5px 4px 0}button:hover,a.btn:hover{background:#245374}pre{white-space:pre-wrap;overflow-wrap:anywhere;background:#080e18;padding:12px;border-radius:8px;max-height:360px;overflow:auto}.small{font-size:.88rem}.muted{color:var(--muted)}#notice{padding:12px;border:1px solid var(--line);border-radius:10px;margin:12px 0}.hidden{display:none}footer{max-width:1080px;margin:auto;padding:0 22px 28px;color:var(--muted)}code{overflow-wrap:anywhere}
+</style>
+</head>
+<body>
+<header><h1>Browser Security Diagnostics</h1><p>Defensive, non-invasive checks for this Secure Chat deployment. This page does not exploit browsers, execute remote commands, or collect hidden telemetry.</p><a class="btn" href="/">← Return to chat</a><button id="run">Run checks again</button><button id="export">Export report (JSON)</button></header>
+<main>
+<div id="notice">Checks run only against this page and the same-origin Secure Chat API. Results are advisory; browser-reported details are not proof of device identity.</div>
+<div class="grid">
+<section class="card"><h2>Deployment and transport</h2><div id="transport">Running checks…</div></section>
+<section class="card"><h2>Response security headers</h2><div id="headers">Running checks…</div></section>
+<section class="card"><h2>Browser capabilities</h2><div id="browser">Running checks…</div></section>
+<section class="card"><h2>Session and access</h2><div id="session">Running checks…</div></section>
+<section class="card"><h2>Page resource review</h2><div id="resources">Running checks…</div></section>
+<section class="card"><h2>Admin security events</h2><div id="events"><p>Sign in as an administrator to load recent audit events.</p></div></section>
+</div>
+<section class="card" style="margin-top:14px"><h2>Report details</h2><p class="small">The report is generated in this browser and is not uploaded. Export only after checking it for sensitive deployment details.</p><pre id="report">No report yet.</pre></section>
+</main>
+<footer>Use only on systems you own or are explicitly authorized to assess. This diagnostic page is not a penetration test, vulnerability scanner, EDR, or guarantee of security.</footer>
+<script>
+(() => {
+'use strict';
+const $ = id => document.getElementById(id);
+const token = localStorage.getItem('scsp.token') || '';
+let report = { generatedAt: null, origin: location.origin, checks: [], notes: [] };
+function add(group, label, state, detail) {
+  const item = { group, label, state, detail: String(detail || '') };
+  report.checks.push(item);
+  const row = document.createElement('div'); row.className = 'result';
+  const status = document.createElement('span'); status.className = 'status ' + state; status.textContent = state;
+  const title = document.createElement('strong'); title.textContent = ' · ' + label;
+  const desc = document.createElement('div'); desc.className = 'small muted'; desc.textContent = detail || '';
+  row.append(status, title, desc); $(group).append(row);
+}
+function reset() {
+  report = { generatedAt: new Date().toISOString(), origin: location.origin, checks: [], notes: [
+    'Client-side diagnostics are best-effort and can be incomplete.',
+    'This report does not establish browser/device identity or prove that a system is secure.',
+    'Bearer tokens stored in localStorage can be exposed by successful same-origin XSS.'
+  ] };
+  for (const id of ['transport','headers','browser','session','resources','events']) $(id).replaceChildren();
+}
+async function run() {
+  reset();
+  const local = ['localhost','127.0.0.1','::1'].includes(location.hostname);
+  add('transport','HTTPS transport', location.protocol === 'https:' ? 'pass' : local ? 'warn' : 'fail',
+      location.protocol === 'https:' ? 'This page is loaded over HTTPS.' : local ? 'HTTP is acceptable only for local development.' : 'Use HTTPS with a trusted certificate before exposing this service.');
+  add('transport','Secure WebSocket capability', location.protocol === 'https:' ? 'pass' : 'warn',
+      location.protocol === 'https:' ? 'The page can use WSS when the chat server is configured accordingly.' : 'A public deployment should use HTTPS/WSS; do not send credentials over public plaintext HTTP.');
+  add('browser','Browser user agent', 'warn', navigator.userAgent || 'Unavailable; user-agent data can be spoofed.');
+  add('browser','Secure context', window.isSecureContext ? 'pass' : 'warn', window.isSecureContext ? 'Secure-context browser APIs are available.' : 'Some browser APIs may be disabled outside secure contexts.');
+  add('browser','Geolocation permission', 'warn', 'No location request was made. Location should be requested only for a clear purpose and with explicit user action.');
+  add('browser','Battery API', 'warn', ('getBattery' in navigator) ? 'Supported by this browser; this page does not read battery status.' : 'Not supported or not exposed by this browser.');
+  add('browser','Clipboard API', navigator.clipboard ? 'pass' : 'warn', navigator.clipboard ? 'Clipboard API is exposed; access remains permission/context dependent.' : 'Clipboard API unavailable in this context.');
+  try {
+    const response = await fetch(location.pathname + location.search, { cache:'no-store', credentials:'same-origin' });
+    const checks = [
+      ['X-Content-Type-Options','nosniff'],
+      ['X-Frame-Options','DENY'],
+      ['Referrer-Policy','no-referrer'],
+      ['Content-Security-Policy',null],
+      ['Permissions-Policy',null]
+    ];
+    for (const [name, expected] of checks) {
+      const value = response.headers.get(name);
+      const good = expected ? (value || '').toLowerCase() === expected.toLowerCase() : !!value;
+      add('headers',name,good?'pass':'warn',value ? 'Observed: ' + value : 'Header missing or not readable. Confirm the server/proxy response configuration.');
+    }
+    if (location.protocol === 'https:') {
+      const hsts = response.headers.get('Strict-Transport-Security');
+      add('headers','Strict-Transport-Security',hsts?'pass':'warn',hsts || 'HSTS was not observed on this response.');
+    } else add('headers','Strict-Transport-Security','warn','Not evaluated as a production HTTPS response.');
+    add('headers','Cache-Control',/no-store/i.test(response.headers.get('Cache-Control')||'')?'pass':'warn',response.headers.get('Cache-Control') || 'No no-store directive observed.');
+  } catch (e) {
+    add('headers','Read response headers','warn','Could not inspect same-origin response headers: ' + e.message);
+  }
+  const insecure = [...document.querySelectorAll('[src],[href]')].map(el => el.getAttribute('src') || el.getAttribute('href')).filter(v => v && /^http:\/\//i.test(v));
+  add('resources','Mixed-content references',insecure.length?'warn':'pass',insecure.length ? insecure.length + ' HTTP reference(s) found: ' + insecure.slice(0,10).join(', ') : 'No HTTP resource references found in this page DOM.');
+  add('resources','External script inventory','warn', [...document.scripts].filter(s=>s.src).map(s=>s.src).join('\n') || 'No external script elements detected.');
+  if (!token) {
+    add('session','Signed-in session','warn','No session token was found in this browser storage. Sign in to check authenticated session status.');
+  } else {
+    try {
+      const response = await fetch('/api/v1/me', { headers:{Authorization:'Bearer '+token}, cache:'no-store' });
+      if (response.ok) {
+        const data = await response.json();
+        add('session','Authenticated session','pass','Server accepted the session for account: ' + (data.user && data.user.username ? data.user.username : 'current user') + '.');
+      } else add('session','Authenticated session','fail','Server returned HTTP ' + response.status + '. Sign in again if this session has expired.');
+    } catch (e) { add('session','Authenticated session','warn','Could not verify session: ' + e.message); }
+    try {
+      const response = await fetch('/api/v1/admin/audit?limit=20', { headers:{Authorization:'Bearer '+token}, cache:'no-store' });
+      if (response.ok) {
+        const data = await response.json();
+        const events = Array.isArray(data.events) ? data.events : Array.isArray(data.audit) ? data.audit : [];
+        const box = $('events'); box.replaceChildren();
+        if (!events.length) { const p=document.createElement('p');p.textContent='No event rows returned by the audit endpoint.';box.append(p); }
+        for (const event of events.slice(0,20)) {
+          const row=document.createElement('div');row.className='result';
+          const title=document.createElement('strong');title.textContent=String(event.action || event.event || 'Security event');
+          const detail=document.createElement('div');detail.className='small muted';detail.textContent=[event.createdAt||event.created_at||'',event.target||''].filter(Boolean).join(' · ');
+          row.append(title,detail);box.append(row);
+        }
+        add('session','Admin audit access','pass','The current account can read the admin audit endpoint. The event list is shown above.');
+      } else {
+        $('events').textContent = response.status === 403 ? 'Admin privileges required to view audit events.' : 'Audit endpoint returned HTTP ' + response.status + '.';
+        add('session','Admin audit access',response.status===403?'pass':'warn',response.status===403?'Non-admin access was denied.':'Audit events could not be loaded.');
+      }
+    } catch (e) { $('events').textContent='Could not load audit events: '+e.message; add('session','Admin audit access','warn',e.message); }
+  }
+  report.generatedAt = new Date().toISOString();
+  $('report').textContent = JSON.stringify(report,null,2);
+}
+$('run').addEventListener('click',run);
+$('export').addEventListener('click',()=>{
+  const blob = new Blob([JSON.stringify(report,null,2)],{type:'application/json'});
+  const url = URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download='secure-chat-security-report-'+new Date().toISOString().replace(/[:.]/g,'-')+'.json';
+  document.body.append(a); a.click(); a.remove(); URL.revokeObjectURL(url);
+});
+run();
+})();
+</script>
+</body>
+</html>
