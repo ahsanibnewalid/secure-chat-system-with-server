@@ -16,11 +16,27 @@ The distributable is written to `release/`. Build artifacts are OS-specific; do 
 ## Runtime behavior
 
 - The manager creates a local self-signed certificate on first launch and stores it in the per-user application data folder.
-- The local server binds to `127.0.0.1:8443` only. This intentionally avoids exposing an unconfigured service to the LAN or internet.
+- The default is Local only on `127.0.0.1:8443`. In Server settings, an administrator can change the port (1024–65535), switch to Local network mode, enable/disable registration, set message length, and set session lifetime. Settings persist in the app data folder. Stop the server before saving changes.
 - The manager pins the generated local certificate for its own localhost chat window. This does not make that certificate trusted by external browsers or phones.
-- To host for other devices, deploy with a trusted certificate whose DNS/IP Subject Alternative Name matches the address clients use, then configure a suitable network bind and firewall. The current GUI does not yet provide a secure remote-hosting wizard.
+- To host for other devices, deploy with a trusted certificate whose DNS/IP Subject Alternative Name matches the address clients use, then configure a suitable network bind and firewall. The desktop manager now includes configurable port and LAN/local binding settings. LAN mode is still not equivalent to publicly trusted HTTPS: external browsers and phones must trust the certificate and use an address included in its SAN. Use a trusted public certificate for internet-facing hosting.
 - The app's local server runs while the manager is open. Quitting the manager terminates the server; it is not installed as a Windows service or Linux system daemon.
 - Server data is stored under the operating system's per-user application data directory, not next to the executable. Keep backups of that folder and restrict access.
+
+### Windows firewall for same-Wi-Fi hosting
+
+Only use a firewall rule on a trusted Private network. Run PowerShell as Administrator and replace `8443` if you configured another port:
+
+```powershell
+New-NetFirewallRule -DisplayName "Secure Chat LAN HTTPS" -Direction Inbound -Protocol TCP -LocalPort 8443 -Action Allow -Profile Private
+```
+
+Remove the rule when you no longer need LAN hosting:
+
+```powershell
+Remove-NetFirewallRule -DisplayName "Secure Chat LAN HTTPS"
+```
+
+A firewall rule does not make the self-signed certificate trusted. Guest Wi-Fi/client isolation may also block devices from reaching one another.
 
 ## Security and release notes
 
