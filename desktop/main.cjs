@@ -60,7 +60,7 @@ async function startServer() {
   child.once('exit', (code, signal) => {
     logLine('Server process exited (code=' + code + ', signal=' + signal + ')');
     serverProcess = null;
-    if (serverState !== 'stopping') serverState = code === 0 ? 'stopped' : 'error';
+    serverState = (serverState === 'stopping' || code === 0) ? 'stopped' : 'error';
     if (serverState === 'error' && !serverError) serverError = 'Server exited with code ' + code + '.';
     notifyStatus();
   });
@@ -91,5 +91,14 @@ ipcMain.handle('server:status', () => status());
 ipcMain.handle('client:open', (_event, url) => openClient(url));
 ipcMain.handle('app:open-logs', async () => { ensureDirectories(); return shell.openPath(path.join(logDir, 'server.log')); });
 app.whenReady().then(async () => { ensureDirectories(); await ensureCertificate(); setLocalCertificateTrust(); createWindow(); app.on('activate', () => { if (BrowserWindow.getAllWindows().length === 0) createWindow(); }); });
-app.on('before-quit', () => { if (serverProcess) { serverState = 'stopping'; if (serverProcess.connected) serverProcess.send({ type: 'shutdown' }); else serverProcess.kill('SIGTERM'); } });
+let quitting = false;
+app.on('before-quit', event => {
+  if (serverProcess && !quitting) {
+    event.preventDefault(); quitting = true; serverState = 'stopping';
+    const child = serverProcess;
+    child.once('exit', () => { serverProcess = null; app.quit(); });
+    if (child.connected) child.send({ type: 'shutdown' }); else child.kill('SIGTERM');
+    const fallback = setTimeout(() => { if (serverProcess === child) child.kill('SIGTERM'); }, 5000); fallback.unref();
+  }
+});
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit(); });
