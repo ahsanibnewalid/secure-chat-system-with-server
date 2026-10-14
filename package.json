@@ -5,7 +5,7 @@
   "description": "Cross-platform, UI-first self-hosted text chat with desktop manager",
   "main": "desktop/main.cjs",
   "engines": {
-    "node": ">=20"
+    "node": ">=22"
   },
   "scripts": {
     "start": "node src/server.js",
@@ -59,6 +59,7 @@
         "deb"
       ],
       "category": "Network",
+      "maintainer": "Ahsan I. Newalid <ahsanibnewalid@users.noreply.github.com>",
       "artifactName": "Secure-Chat-${version}.${ext}"
     },
     "npmRebuild": false,
