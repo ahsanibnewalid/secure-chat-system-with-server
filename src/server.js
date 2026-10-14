@@ -28,6 +28,36 @@ app.use((req, res, next) => {
 });
 app.use(express.static(path.join(__dirname, '..', 'public'), { index: 'index.html', etag: true }));
 
+// Small in-process abuse guard for credential and account-creation endpoints.
+// Uses the direct socket address (not client-controlled X-Forwarded-For).
+// For multi-process deployments, replace with a shared store such as Redis.
+const authAttempts = new Map();
+const AUTH_WINDOW_MS = 10 * 60 * 1000;
+const AUTH_MAX_ATTEMPTS = 12;
+function authAbuseGuard(req, res, next) {
+  const now = Date.now();
+  const ip = req.socket.remoteAddress || 'unknown';
+  const key = ip + ':' + req.path;
+  let entry = authAttempts.get(key);
+  if (!entry || now - entry.startedAt >= AUTH_WINDOW_MS) {
+    entry = { startedAt: now, count: 0 };
+    authAttempts.set(key, entry);
+  }
+  entry.count += 1;
+  if (entry.count > AUTH_MAX_ATTEMPTS) {
+    res.setHeader('Retry-After', String(Math.ceil((AUTH_WINDOW_MS - (now - entry.startedAt)) / 1000)));
+    return res.status(429).json({ error: 'Too many attempts. Wait before trying again.' });
+  }
+  // Bound memory use and opportunistically remove expired buckets.
+  if (authAttempts.size > 5000) {
+    for (const [bucket, value] of authAttempts) {
+      if (now - value.startedAt >= AUTH_WINDOW_MS) authAttempts.delete(bucket);
+    }
+  }
+  next();
+}
+app.use(['/api/v1/auth/login', '/api/v1/auth/register', '/api/v1/admin/bootstrap'], authAbuseGuard);
+
 const online = new Map(); // userId -> Set<WebSocket>
 const sessions = db.prepare('SELECT token_hash,user_id,expires_at FROM sessions');
 const getUser = db.prepare('SELECT id,username,role,disabled FROM users WHERE id=?');
@@ -118,8 +148,10 @@ app.post('/api/v1/auth/login', (req,res) => {
   if (typeof username !== 'string' || typeof password !== 'string' || username.length > 24 || password.length > 128)
     return res.status(400).json({ error:'Enter a valid username and password.' });
   const u = findUser.get(username);
-  if (!u || u.disabled || !verifyPassword(password, u.salt, u.password_hash))
+  if (!u || u.disabled || !verifyPassword(password, u.salt, u.password_hash)) {
+    record(null, 'auth.login.failed', typeof username === 'string' ? username.slice(0,24) : null);
     return res.status(401).json({ error:'Username or password is incorrect.' });
+  }
   const token = issueSession(u); record(u.id,'auth.login');
   res.json({ token, user:cleanUser(u) });
 });
