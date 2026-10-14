@@ -55,7 +55,7 @@ curl --cacert certs/server-cert.pem -H "Content-Type: application/json" \
   https://127.0.0.1:8443/api/v1/admin/bootstrap
 ```
 
-The first successful call creates the administrator. Remove `ADMIN_BOOTSTRAP_TOKEN` from the service environment immediately and restart. Never put the token in browser code, source control, a URL, or a public issue. The web admin screens are not yet implemented; the authenticated admin API is available for integration.
+The first successful call creates the administrator. Remove `ADMIN_BOOTSTRAP_TOKEN` from the service environment immediately and restart. Never put the token in browser code, source control, a URL, or a public issue. The web UI includes a basic administrator inventory, account-disable controls, announcements, and an optional launcher for a separately installed BeEF console.
 
 ## 5. Run as a service
 
