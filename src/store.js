@@ -52,6 +52,33 @@ function openStore(dataDir) {
       created_at TEXT NOT NULL
     );
     CREATE INDEX IF NOT EXISTS push_subscriptions_user_idx ON push_subscriptions(user_id);
+    CREATE TABLE IF NOT EXISTS user_state (
+      user_id TEXT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
+      last_read_public_message_id INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE TABLE IF NOT EXISTS devices (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+      label TEXT NOT NULL DEFAULT 'This device',
+      device_type TEXT NOT NULL DEFAULT 'unknown',
+      browser TEXT NOT NULL DEFAULT 'unknown',
+      os TEXT NOT NULL DEFAULT 'unknown',
+      screen_width INTEGER,
+      screen_height INTEGER,
+      timezone TEXT,
+      language TEXT,
+      app_version TEXT,
+      battery_level INTEGER,
+      battery_charging INTEGER,
+      location_lat REAL,
+      location_lng REAL,
+      location_shared_at TEXT,
+      consent_at TEXT NOT NULL,
+      last_seen_at TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      UNIQUE(user_id, id)
+    );
+    CREATE INDEX IF NOT EXISTS devices_user_seen_idx ON devices(user_id, last_seen_at DESC);
     CREATE TABLE IF NOT EXISTS audit (
       id INTEGER PRIMARY KEY AUTOINCREMENT, actor_id TEXT, action TEXT NOT NULL,
       target TEXT, created_at TEXT NOT NULL
