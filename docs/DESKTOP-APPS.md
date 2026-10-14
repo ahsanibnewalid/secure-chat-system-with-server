@@ -18,7 +18,7 @@ The distributable is written to `release/`. Build artifacts are OS-specific; do 
 - The manager creates a local self-signed certificate on first launch and stores it in the per-user application data folder.
 - The local server binds to `127.0.0.1:8443` only. This intentionally avoids exposing an unconfigured service to the LAN or internet.
 - The manager pins the generated local certificate for its own localhost chat window. This does not make that certificate trusted by external browsers or phones.
-- To host for other devices, deploy with a trusted certificate whose DNS/IP Subject Alternative Name matches the address clients use, then configure a suitable network bind and firewall. The current GUI does not yet provide a secure remote-hosting wizard.
+- To host for other devices, deploy with a trusted certificate whose DNS/IP Subject Alternative Name matches the address clients use, then configure a suitable network bind and firewall. The desktop manager now includes configurable port and LAN/local binding settings. LAN mode is still not equivalent to publicly trusted HTTPS: external browsers and phones must trust the certificate and use an address included in its SAN. Use a trusted public certificate for internet-facing hosting.
 - The app's local server runs while the manager is open. Quitting the manager terminates the server; it is not installed as a Windows service or Linux system daemon.
 - Server data is stored under the operating system's per-user application data directory, not next to the executable. Keep backups of that folder and restrict access.
 
