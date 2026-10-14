@@ -17,6 +17,7 @@
 - Unread notifications and administrator announcements to one enabled user or all enabled users.
 - Optional browser Web Push using VAPID keys.
 - Administrator user inventory, account status, and account-disable/session-revocation controls. The default web client does not offer device-diagnostics or location-sharing controls.
+- Optional admin-only launcher to a separately installed BeEF console via `BEEF_CONSOLE_URL`; this is a link integration, not browser exploitation or remote-control functionality.
 - Security headers, bounded payloads, input validation, and basic in-process request/message throttling.
 - Windows installer; Linux AppImage and Debian package build targets.
 
