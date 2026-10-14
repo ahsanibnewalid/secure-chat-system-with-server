@@ -81,6 +81,10 @@ Public-room unread counts are calculated per account from the last public messag
 
 The web client is installable as a PWA on compatible browsers. Browser Web Push works only where the browser/platform supports service workers and push, with HTTPS, permission, and VAPID keys configured. This is not the same as native APNs/FCM integration: native iOS/Android push delivery requires platform app packaging and Apple/Google credentials and is not included in this web-only build.
 
+## Message tools
+
+The chat UI supports replying by quoting a short excerpt into the outgoing message, searching messages currently loaded in the conversation, copying a message when the browser Clipboard API permits it, and saving drafts locally in the browser. Drafts are separated by signed-in account and conversation, remain on that browser, and are not synchronized to the server or other devices. A reply is a quoted text prefix, not a server-side threaded reply reference.
+
 ## Data, backup, and recovery
 
 The SQLite database is `data/chat.sqlite` (with transient WAL files while running). Stop the server cleanly before copying the database for a simple consistent backup. Restore only a verified backup while the service is stopped, preserve restrictive filesystem permissions, then start and check `/api/v1/health`. Automated backup validation/restoration UI is not yet implemented. Keep backup copies encrypted and access-controlled.
