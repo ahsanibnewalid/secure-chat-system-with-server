@@ -8,9 +8,9 @@ The desktop shell adds a graphical server manager and a separate chat window. Af
 
 - Windows: NSIS installer producing a Windows executable installer.
 - Linux: AppImage and Debian package.
-- The local server binds to `127.0.0.1:8443` by default, intentionally avoiding accidental LAN exposure.
+- Local only on `127.0.0.1:8443` is the default. The Server settings panel supports port changes, Local network mode, registration control, message-length limits and session lifetime.
 - Server database, local TLS certificate and logs are stored in the current OS user's application-data folder.
-- Android/iOS users can continue to use the responsive browser client when the server is hosted with a trusted certificate and proper network configuration.
+- LAN mode shows private IP connection URLs, but Android/iOS browsers still need a certificate they trust. For internet access, use a public hostname with a publicly trusted certificate and correctly configured hosting/firewall.
 
 See [Desktop executable builds](docs/DESKTOP-APPS.md) for packaging, security notes and limitations.
 
@@ -63,7 +63,7 @@ The WebSocket endpoint is `/ws` over WSS and requires a valid session token in t
 
 ## Important limitations
 
-This is a functional foundation, not yet the entire product roadmap. The desktop manager does not yet include a guided admin-bootstrap wizard, trusted public TLS provisioning, a LAN hosting wizard, an OS background-service installer, auto-updates, signed release binaries, native Android/iOS clients, or a complete web admin dashboard. The generated local certificate is for local development only and is not trusted by external phones or browsers. To let other devices connect, deploy with a trusted certificate matching the public DNS name and a deliberately configured network/firewall. Do not expose the default localhost server directly to the internet.
+This is a functional foundation, not yet the entire product roadmap. The desktop manager still does not include a guided admin-bootstrap wizard, automatic public TLS provisioning, an OS background-service installer, auto-updates, signed release binaries, native Android/iOS clients, or a complete web admin dashboard. The generated local certificate is self-signed and is not automatically trusted by external phones or browsers, even when LAN mode is enabled. For reliable mobile access, use a certificate/CA trusted by each client, or a public hostname with a publicly trusted certificate. Do not expose the default localhost server directly to the internet.
 
 - [Setup and troubleshooting](docs/SETUP.md)
 - [Desktop executable guide](docs/DESKTOP-APPS.md)
